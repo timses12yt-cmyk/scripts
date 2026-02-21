@@ -1,45 +1,68 @@
--- Nez0x UI - ПОЛНАЯ ВЕРСИЯ (ИСПРАВЛЕНО)
+-- Nez0x UI - ПОЛНАЯ ВЕРСИЯ (ФИНАЛ)
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local GuiService = game:GetService("GuiService")
+local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
+local NetworkClient = game:GetService("NetworkClient")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
-local gui = Instance.new("ScreenGui")
+
+-- Пытаемся использовать CoreGui для самого высокого приоритета
+local success, gui = pcall(function()
+    return Instance.new("ScreenGui")
+end)
+
+if not success then
+    gui = Instance.new("ScreenGui")
+end
+
 gui.Name = "Nez0xUI"
 gui.IgnoreGuiInset = true
 gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
+gui.DisplayOrder = 999999
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Затемнение
+local parentSuccess, parentError = pcall(function()
+    gui.Parent = CoreGui
+end)
+
+if not parentSuccess then
+    gui.Parent = player:WaitForChild("PlayerGui")
+end
+
 local blur = Instance.new("BlurEffect")
 blur.Size = 0
 blur.Parent = Lighting
 
--- Главный контейнер
 local main = Instance.new("Frame")
 main.Name = "Main"
 main.BackgroundTransparency = 1
 main.Size = UDim2.new(1, 0, 1, 0)
+main.ZIndex = 1000
 main.Parent = gui
 
--- Затемнение фона
 local bgDim = Instance.new("Frame")
 bgDim.Name = "BackgroundDim"
 bgDim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 bgDim.BackgroundTransparency = 0.5
 bgDim.Size = UDim2.new(1, 0, 1, 0)
+bgDim.ZIndex = 1000
 bgDim.Parent = main
 
--- Контейнер для UI
 local uiContainer = Instance.new("Frame")
 uiContainer.Name = "UIContainer"
 uiContainer.BackgroundTransparency = 1
 uiContainer.Size = UDim2.new(0, 1650, 0, 700)
 uiContainer.Position = UDim2.new(0.5, -825, 0.5, -350)
+uiContainer.ZIndex = 1001
 uiContainer.Parent = main
 
--- Функция создания колонки со скроллом
 local function createColumn(name, xPos, yPos, width)
     width = width or 200
     
@@ -50,6 +73,7 @@ local function createColumn(name, xPos, yPos, width)
     col.BorderSizePixel = 0
     col.Position = UDim2.new(0, xPos, 0, yPos)
     col.Size = UDim2.new(0, width, 0, 550)
+    col.ZIndex = 1002
     col.Parent = uiContainer
     
     local corner = Instance.new("UICorner")
@@ -70,6 +94,7 @@ local function createColumn(name, xPos, yPos, width)
     colTitle.TextSize = 18
     colTitle.Position = UDim2.new(0, 15, 0, 10)
     colTitle.Size = UDim2.new(1, -30, 0, 25)
+    colTitle.ZIndex = 1003
     colTitle.Parent = col
     
     local scrollingContainer = Instance.new("ScrollingFrame")
@@ -78,10 +103,11 @@ local function createColumn(name, xPos, yPos, width)
     scrollingContainer.BorderSizePixel = 0
     scrollingContainer.Position = UDim2.new(0, 0, 0, 40)
     scrollingContainer.Size = UDim2.new(1, 0, 1, -45)
-    scrollingContainer.CanvasSize = UDim2.new(0, 0, 2, 0) -- Увеличиваем размер холста
+    scrollingContainer.CanvasSize = UDim2.new(0, 0, 2, 0)
     scrollingContainer.ScrollBarThickness = 6
     scrollingContainer.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 110)
-    scrollingContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y -- Автоматический размер
+    scrollingContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scrollingContainer.ZIndex = 1003
     scrollingContainer.Parent = col
     
     local layout = Instance.new("UIListLayout")
@@ -93,7 +119,6 @@ local function createColumn(name, xPos, yPos, width)
     return {frame = col, scrolling = scrollingContainer, layout = layout}
 end
 
--- Создаем 7 колонок
 local startX = 30
 local gap = 215
 local colY = 30
@@ -108,10 +133,9 @@ local cols = {
     Theme = createColumn("THEME", startX + gap*6 + 10, colY, 250),
 }
 
--- Функции
 local features = {
     aimbot = false,
-    teamCheck = false,
+    teamCheck = true, -- По умолчанию включено (не наводится на друзей)
     fly = false,
     noclip = false,
     infJump = false,
@@ -124,25 +148,83 @@ local features = {
     aimbotShowFOV = false,
     
     flySpeed = 50,
-    flyAntiKick = false,
-    
-    noclipAntiKick = false,
     
     espEnabled = false,
     espMode = "Обводка",
     espShowName = true,
     espShowHealth = true,
     espShowDistance = false,
+    espShowTrails = false,
     espColor = Color3.fromRGB(255, 80, 80),
     espTracerColor = Color3.fromRGB(80, 140, 255),
     espTeamColor = Color3.fromRGB(80, 255, 80),
+    espTrailColor = Color3.fromRGB(100, 200, 255),
+    espTrailTime = 5,
 }
 
 local defaultBrightness = Lighting.Brightness
 local defaultClock = Lighting.ClockTime
 local defaultShadows = Lighting.GlobalShadows
 
--- FOV круг
+local themeSettings = {
+    bgDimTransparency = 0.5,
+    bgDimColor = Color3.fromRGB(0, 0, 0),
+    columnsTransparency = 0.1,
+    columnsColor = Color3.fromRGB(30, 30, 35),
+    buttonsTransparency = 0.2,
+    buttonsColor = Color3.fromRGB(40, 40, 45),
+    accentColor = Color3.fromRGB(60, 70, 120),
+    textColor = Color3.fromRGB(255, 255, 255),
+    secondaryTextColor = Color3.fromRGB(200, 200, 200),
+    brightness = 1,
+    miniBarEnabled = true,
+    miniBarShowFPS = true,
+    miniBarShowTime = true,
+    miniBarShowPing = true,
+}
+
+local fps = 60
+local ping = 0
+local currentTime = "00:00"
+local lastFPSUpdate = tick()
+local frameCount = 0
+
+RunService.RenderStepped:Connect(function()
+    frameCount = frameCount + 1
+    local now = tick()
+    if now - lastFPSUpdate >= 1 then
+        fps = frameCount
+        frameCount = 0
+        lastFPSUpdate = now
+    end
+end)
+
+local function getPing()
+    local success, result = pcall(function()
+        local stats = Stats
+        if stats then
+            local network = stats:FindFirstChild("Network")
+            if network then
+                local pingValue = network:FindFirstChild("Ping")
+                if pingValue then
+                    return math.floor(pingValue.Value * 1000)
+                end
+            end
+        end
+        return 0
+    end)
+    return success and result or 0
+end
+
+spawn(function()
+    while true do
+        local dateTime = os.date("*t")
+        currentTime = string.format("%02d:%02d", dateTime.hour, dateTime.min)
+        ping = getPing()
+        wait(0.5)
+    end
+end)
+
 local fovCircle = Drawing.new("Circle")
 fovCircle.Visible = false
 fovCircle.Radius = features.aimbotFOV
@@ -150,8 +232,9 @@ fovCircle.Color = Color3.fromRGB(255, 255, 255)
 fovCircle.Thickness = 2
 fovCircle.NumSides = 60
 fovCircle.Filled = false
+fovCircle.ZIndex = 999999
 
--- Aimbot
+-- Aimbot с правильной проверкой на друзей
 RunService.RenderStepped:Connect(function()
     if not features.aimbot then return end
     
@@ -172,7 +255,25 @@ RunService.RenderStepped:Connect(function()
     
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and p.Character and p.Character:FindFirstChild("Head") then
-            if features.teamCheck and p.Team == player.Team then continue end
+            -- Проверка на друзей (если teamCheck включен)
+            if features.teamCheck then
+                -- Проверяем, есть ли у игрока Team и совпадает ли он с нашей командой
+                local playerTeam = p.Team
+                local myTeam = player.Team
+                
+                -- Если у обоих есть команды и они совпадают - пропускаем
+                if playerTeam and myTeam and playerTeam == myTeam then
+                    continue
+                end
+                
+                -- Дополнительная проверка на друзей через FriendService (если доступно)
+                local success, isFriend = pcall(function()
+                    return player:IsFriendsWith(p.UserId)
+                end)
+                if success and isFriend then
+                    continue
+                end
+            end
             
             if features.aimbotShowFOV then
                 local headPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(p.Character.Head.Position)
@@ -197,7 +298,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Fly
 RunService.Heartbeat:Connect(function()
     if not features.fly or not player.Character then return end
     local hrp = player.Character:FindFirstChild("HumanoidRootPart")
@@ -211,16 +311,9 @@ RunService.Heartbeat:Connect(function()
     if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.RightVector end
     if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.RightVector end
     
-    if features.flyAntiKick then
-        if hrp.Velocity.Y < -5 then
-            hrp.Velocity = Vector3.new(hrp.Velocity.X, -5, hrp.Velocity.Z)
-        end
-    end
-    
     hrp.Velocity = dir * features.flySpeed
 end)
 
--- Noclip
 RunService.Stepped:Connect(function()
     if not features.noclip or not player.Character then return end
     for _, p in ipairs(player.Character:GetDescendants()) do
@@ -228,13 +321,8 @@ RunService.Stepped:Connect(function()
             p.CanCollide = false
         end
     end
-    
-    if features.noclipAntiKick and player.Character:FindFirstChild("Humanoid") then
-        player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-    end
 end)
 
--- Infinity Jump
 UIS.JumpRequest:Connect(function()
     if not features.infJump or not player.Character then return end
     local hrp = player.Character:FindFirstChild("HumanoidRootPart")
@@ -244,7 +332,6 @@ UIS.JumpRequest:Connect(function()
     end
 end)
 
--- Click TP
 UIS.InputBegan:Connect(function(input, gp)
     if gp then return end
     if not features.clickTp then return end
@@ -256,14 +343,77 @@ UIS.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- ESP система
+-- ESP система с трейлами
 local espObjects = {}
+local trailObjects = {}
+local playerPositions = {}
+
+local function updateTrails()
+    for _, trail in ipairs(trailObjects) do
+        pcall(function() trail:Destroy() end)
+    end
+    trailObjects = {}
+    
+    if not features.espEnabled or not features.espShowTrails then return end
+    
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == player then continue end
+        if not p.Character then continue end
+        
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local trail = Instance.new("Trail")
+            trail.Parent = hrp
+            trail.Color = ColorSequence.new(features.espTrailColor)
+            trail.Lifetime = features.espTrailTime
+            trail.Transparency = NumberSequence.new(0.5)
+            trail.Width = 0.5
+            trail.FaceCamera = true
+            trail.Attachment0 = Instance.new("Attachment")
+            trail.Attachment0.Parent = hrp
+            trail.Attachment0.Position = Vector3.new(0, 2, 0)
+            trail.Attachment1 = Instance.new("Attachment")
+            trail.Attachment1.Parent = hrp
+            trail.Attachment1.Position = Vector3.new(0, -2, 0)
+            
+            table.insert(trailObjects, trail)
+            table.insert(trailObjects, trail.Attachment0)
+            table.insert(trailObjects, trail.Attachment1)
+        end
+    end
+end
+
+local function createESPText(p, text, color, offset)
+    local billboard = Instance.new("BillboardGui")
+    billboard.Parent = p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart")
+    billboard.Size = UDim2.new(0, 200, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, offset, 0)
+    billboard.AlwaysOnTop = true
+    billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    billboard.Name = "ESP_" .. HttpService:GenerateGUID(false)
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Parent = billboard
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = text
+    textLabel.TextColor3 = color
+    textLabel.TextStrokeTransparency = 0.5
+    textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    textLabel.Font = Enum.Font.Gotham
+    textLabel.TextSize = 14
+    textLabel.TextScaled = true
+    
+    return billboard
+end
 
 local function updateESP()
     for _, obj in ipairs(espObjects) do
-        obj:Destroy()
+        pcall(function() obj:Destroy() end)
     end
     espObjects = {}
+    
+    updateTrails()
     
     if not features.espEnabled then return end
     
@@ -277,8 +427,21 @@ local function updateESP()
         
         if hrp and head and hum then
             local espColor = features.espColor
-            if features.teamCheck and p.Team == player.Team then
-                espColor = features.espTeamColor
+            if features.teamCheck then
+                -- Проверка на друзей для ESP
+                local playerTeam = p.Team
+                local myTeam = player.Team
+                
+                if playerTeam and myTeam and playerTeam == myTeam then
+                    espColor = features.espTeamColor
+                end
+                
+                local success, isFriend = pcall(function()
+                    return player:IsFriendsWith(p.UserId)
+                end)
+                if success and isFriend then
+                    espColor = features.espTeamColor
+                end
             end
             
             if features.espMode == "Обводка" then
@@ -288,80 +451,194 @@ local function updateESP()
                 highlight.FillTransparency = 0.5
                 highlight.OutlineColor = espColor
                 highlight.OutlineTransparency = 0
+                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 table.insert(espObjects, highlight)
+                
+            elseif features.espMode == "Хитбокс" then
+                local parts = {hrp, head}
+                for _, part in ipairs(p.Character:GetChildren()) do
+                    if part:IsA("BasePart") then
+                        local box = Instance.new("SelectionBox")
+                        box.Parent = part
+                        box.Adornee = part
+                        box.Color3 = espColor
+                        box.LineThickness = 0.1
+                        box.Transparency = 0.5
+                        box.SurfaceTransparency = 0.7
+                        table.insert(espObjects, box)
+                    end
+                end
+                
+            elseif features.espMode == "Палочки" then
+                local box = Instance.new("SelectionBox")
+                box.Parent = hrp
+                box.Adornee = hrp
+                box.Color3 = espColor
+                box.LineThickness = 0.05
+                box.Transparency = 0
+                box.SurfaceTransparency = 1
+                table.insert(espObjects, box)
+                
+                local line = Instance.new("SelectionBox")
+                line.Parent = head
+                line.Adornee = head
+                line.Color3 = espColor
+                line.LineThickness = 0.05
+                line.Transparency = 0
+                line.SurfaceTransparency = 1
+                table.insert(espObjects, line)
+            end
+            
+            -- Текстовая информация
+            local yOffset = 3
+            if features.espShowName then
+                local nameText = createESPText(p, p.Name, Color3.fromRGB(255, 255, 255), yOffset)
+                table.insert(espObjects, nameText)
+                yOffset = yOffset + 2
+            end
+            
+            if features.espShowHealth then
+                local healthText = createESPText(p, tostring(math.floor(hum.Health)) .. " HP", 
+                    hum.Health > 50 and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0), yOffset)
+                table.insert(espObjects, healthText)
+                yOffset = yOffset + 2
+            end
+            
+            if features.espShowDistance and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = math.floor((player.Character.HumanoidRootPart.Position - hrp.Position).Magnitude)
+                local distText = createESPText(p, tostring(dist) .. " studs", Color3.fromRGB(200, 200, 200), yOffset)
+                table.insert(espObjects, distText)
             end
         end
     end
 end
 
--- Particles система
+-- Particles система - рандомные частицы в прогруженной территории
 local particles = {}
 local particleFeatures = {
     enabled = false,
-    particleType = "Шарики",
-    count = 5,
-    size = 1,
-    speed = 3,
-    spread = 50
+    particleType = "Шары 3D",
+    count = 20,
+    size = 0.5,
+    speed = 10,
+    spread = 50,
+    lifetime = 3,
+    color = Color3.fromRGB(100, 200, 255)
 }
 
-local function updateParticles()
-    for _, p in ipairs(particles) do
-        p:Destroy()
-    end
-    particles = {}
-    
-    if not particleFeatures.enabled or not player.Character then return end
-    
+local function createRandomParticle()
+    if not player.Character then return nil end
     local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+    if not hrp then return nil end
     
-    local texture = "rbxasset://textures/particles/sparkles_main.dds"
-    local color = Color3.fromRGB(255, 255, 255)
+    -- Случайная позиция в радиусе от игрока
+    local angle = math.random() * 2 * math.pi
+    local radius = math.random(10, particleFeatures.spread)
+    local height = math.random(-10, 20)
     
-    if particleFeatures.particleType == "Шарики" then
-        texture = "rbxasset://textures/particles/sparkles_main.dds"
-        color = Color3.fromRGB(255, 255, 255)
-    elseif particleFeatures.particleType == "Сердечки" then
-        texture = "rbxasset://textures/particles/heart.dds"
-        color = Color3.fromRGB(255, 100, 100)
-    elseif particleFeatures.particleType == "Звездочки" then
-        texture = "rbxasset://textures/particles/star.dds"
-        color = Color3.fromRGB(255, 255, 100)
-    elseif particleFeatures.particleType == "Доллары" then
-        texture = "rbxasset://textures/particles/dollar.dds"
-        color = Color3.fromRGB(100, 255, 100)
+    local pos = hrp.Position + Vector3.new(
+        math.cos(angle) * radius,
+        height,
+        math.sin(angle) * radius
+    )
+    
+    -- Случайное направление
+    local dir = Vector3.new(
+        math.random(-100, 100) / 100,
+        math.random(-50, 100) / 100,
+        math.random(-100, 100) / 100
+    ).Unit
+    
+    -- Цвет в зависимости от типа
+    local color = particleFeatures.color
+    if particleFeatures.particleType == "Огненные" then
+        color = Color3.fromRGB(255, math.random(50, 150), 0)
+    elseif particleFeatures.particleType == "Ледяные" then
+        color = Color3.fromRGB(150, math.random(200, 255), 255)
+    elseif particleFeatures.particleType == "Радужные" then
+        color = Color3.fromHSV(math.random(), 1, 1)
+    elseif particleFeatures.particleType == "Шары 3D" then
+        color = Color3.fromRGB(100, math.random(150, 255), 255)
     end
     
-    local attachment = Instance.new("Attachment")
-    attachment.Parent = hrp
+    -- Создание частицы (шар)
+    local ball = Instance.new("Part")
+    ball.Parent = workspace
+    ball.Size = Vector3.new(particleFeatures.size, particleFeatures.size, particleFeatures.size)
+    ball.Position = pos
+    ball.Anchored = false
+    ball.CanCollide = false
+    ball.Transparency = 0.2
+    ball.BrickColor = BrickColor.new(color)
+    ball.Material = Enum.Material.Neon
+    ball.Shape = Enum.PartType.Ball
+    ball.TopSurface = Enum.SurfaceType.Smooth
+    ball.BottomSurface = Enum.SurfaceType.Smooth
     
-    local particle = Instance.new("ParticleEmitter")
-    particle.Parent = attachment
-    particle.Rate = particleFeatures.count
-    particle.Lifetime = NumberRange.new(3)
-    particle.SpreadAngle = Vector2.new(360, 360)
-    particle.Speed = NumberRange.new(particleFeatures.speed)
-    particle.Size = NumberSequence.new(particleFeatures.size)
-    particle.Texture = texture
-    particle.Color = ColorSequence.new(color)
-    particle.VelocityInheritance = 0.5
-    particle.Enabled = true
+    -- Свечение
+    local glow = Instance.new("Part")
+    glow.Parent = workspace
+    glow.Size = Vector3.new(particleFeatures.size * 2, particleFeatures.size * 2, particleFeatures.size * 2)
+    glow.Position = pos
+    glow.Anchored = false
+    glow.CanCollide = false
+    glow.Transparency = 0.6
+    glow.BrickColor = BrickColor.new(color)
+    glow.Material = Enum.Material.Neon
+    glow.Shape = Enum.PartType.Ball
+    glow.TopSurface = Enum.SurfaceType.Smooth
+    glow.BottomSurface = Enum.SurfaceType.Smooth
     
-    table.insert(particles, attachment)
-    table.insert(particles, particle)
+    -- Точечный свет
+    local light = Instance.new("PointLight")
+    light.Parent = ball
+    light.Color = color
+    light.Range = particleFeatures.size * 15
+    light.Brightness = 2
+    light.Shadows = false
+    
+    -- Установка скорости
+    ball.Velocity = dir * particleFeatures.speed
+    glow.Velocity = dir * particleFeatures.speed
+    
+    -- Удаление через время
+    game:GetService("Debris"):AddItem(ball, particleFeatures.lifetime)
+    game:GetService("Debris"):AddItem(glow, particleFeatures.lifetime)
+    game:GetService("Debris"):AddItem(light, particleFeatures.lifetime)
+    
+    return {ball, glow, light}
 end
+
+local function updateParticles()
+    -- Очистка старых частиц (они сами удаляются через Debris)
+    particles = {}
+end
+
+-- Запуск генерации частиц
+spawn(function()
+    while true do
+        if particleFeatures.enabled and player.Character then
+            -- Создаем несколько частиц за раз
+            for i = 1, math.floor(particleFeatures.count / 2) do
+                createRandomParticle()
+                wait(0.1)
+            end
+        end
+        wait(particleFeatures.lifetime / 2)
+    end
+end)
 
 -- Функция создания кнопки
 local function createButton(col, text, isPremium, callback)
     local btn = Instance.new("TextButton")
     btn.Name = text .. "Btn"
     btn.AutoButtonColor = false
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-    btn.BackgroundTransparency = 0.2
+    btn.BackgroundColor3 = themeSettings.buttonsColor
+    btn.BackgroundTransparency = themeSettings.buttonsTransparency
     btn.BorderSizePixel = 0
     btn.Size = UDim2.new(1, -20, 0, 28)
     btn.Text = ""
+    btn.ZIndex = 1004
     btn.Parent = col.scrolling
 
     local corner = Instance.new("UICorner")
@@ -372,11 +649,12 @@ local function createButton(col, text, isPremium, callback)
     txt.BackgroundTransparency = 1
     txt.Font = Enum.Font.Gotham
     txt.Text = text
-    txt.TextColor3 = isPremium and Color3.fromRGB(255, 200, 100) or Color3.new(1, 1, 1)
+    txt.TextColor3 = isPremium and Color3.fromRGB(255, 200, 100) or themeSettings.textColor
     txt.TextSize = 14
     txt.Position = UDim2.new(0, 10, 0, 0)
     txt.Size = UDim2.new(1, -50, 1, 0)
     txt.TextXAlignment = Enum.TextXAlignment.Left
+    txt.ZIndex = 1005
     txt.Parent = btn
 
     local status = Instance.new("TextLabel")
@@ -388,6 +666,7 @@ local function createButton(col, text, isPremium, callback)
     status.Position = UDim2.new(1, -45, 0, 0)
     status.Size = UDim2.new(0, 40, 1, 0)
     status.TextXAlignment = Enum.TextXAlignment.Right
+    status.ZIndex = 1005
     status.Parent = btn
 
     local enabled = false
@@ -397,11 +676,11 @@ local function createButton(col, text, isPremium, callback)
         
         enabled = not enabled
         if enabled then
-            btn.BackgroundColor3 = Color3.fromRGB(60, 70, 120)
+            btn.BackgroundColor3 = themeSettings.accentColor
             status.Text = "ON"
             status.TextColor3 = Color3.fromRGB(100, 255, 100)
         else
-            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            btn.BackgroundColor3 = themeSettings.buttonsColor
             status.Text = "OFF"
             status.TextColor3 = Color3.fromRGB(150, 150, 150)
         end
@@ -414,24 +693,25 @@ local function createButton(col, text, isPremium, callback)
     return {btn = btn, txt = txt, status = status, enabled = enabled}
 end
 
--- Функция создания ползунка
 local function createSlider(col, text, min, max, default, callback, suffix)
     suffix = suffix or ""
     local container = Instance.new("Frame")
     container.Name = text .. "Slider"
     container.BackgroundTransparency = 1
     container.Size = UDim2.new(1, -20, 0, 45)
+    container.ZIndex = 1004
     container.Parent = col.scrolling
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.TextColor3 = themeSettings.secondaryTextColor
     label.TextSize = 14
     label.Position = UDim2.new(0, 0, 0, 0)
     label.Size = UDim2.new(1, -50, 0, 20)
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 1005
     label.Parent = container
 
     local valueLabel = Instance.new("TextLabel")
@@ -443,12 +723,14 @@ local function createSlider(col, text, min, max, default, callback, suffix)
     valueLabel.Position = UDim2.new(1, -50, 0, 0)
     valueLabel.Size = UDim2.new(0, 50, 0, 20)
     valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valueLabel.ZIndex = 1005
     valueLabel.Parent = container
 
     local sliderBg = Instance.new("Frame")
     sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
     sliderBg.Position = UDim2.new(0, 0, 0, 25)
     sliderBg.Size = UDim2.new(1, 0, 0, 8)
+    sliderBg.ZIndex = 1004
     sliderBg.Parent = container
 
     local bgCorner = Instance.new("UICorner")
@@ -456,8 +738,9 @@ local function createSlider(col, text, min, max, default, callback, suffix)
     bgCorner.Parent = sliderBg
 
     local slider = Instance.new("Frame")
-    slider.BackgroundColor3 = Color3.fromRGB(80, 140, 255)
+    slider.BackgroundColor3 = themeSettings.accentColor
     slider.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    slider.ZIndex = 1005
     slider.Parent = sliderBg
 
     local sliderCorner = Instance.new("UICorner")
@@ -468,6 +751,7 @@ local function createSlider(col, text, min, max, default, callback, suffix)
     dragButton.BackgroundTransparency = 1
     dragButton.Size = UDim2.new(1, 0, 1, 0)
     dragButton.Text = ""
+    dragButton.ZIndex = 1006
     dragButton.Parent = sliderBg
 
     local value = default
@@ -505,32 +789,34 @@ local function createSlider(col, text, min, max, default, callback, suffix)
     return container
 end
 
--- Функция создания переключателя
 local function createToggle(col, text, default, callback)
     local container = Instance.new("Frame")
     container.Name = text .. "Toggle"
     container.BackgroundTransparency = 1
     container.Size = UDim2.new(1, -20, 0, 25)
+    container.ZIndex = 1004
     container.Parent = col.scrolling
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.TextColor3 = themeSettings.secondaryTextColor
     label.TextSize = 14
     label.Position = UDim2.new(0, 0, 0, 0)
     label.Size = UDim2.new(1, -40, 1, 0)
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 1005
     label.Parent = container
 
     local toggleBtn = Instance.new("TextButton")
-    toggleBtn.BackgroundColor3 = default and Color3.fromRGB(60, 70, 120) or Color3.fromRGB(50, 50, 55)
+    toggleBtn.BackgroundColor3 = default and themeSettings.accentColor or Color3.fromRGB(50, 50, 55)
     toggleBtn.Position = UDim2.new(1, -30, 0, 2)
     toggleBtn.Size = UDim2.new(0, 25, 0, 20)
     toggleBtn.Text = default and "ON" or "OFF"
     toggleBtn.TextColor3 = default and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(150, 150, 150)
     toggleBtn.TextSize = 10
+    toggleBtn.ZIndex = 1006
     toggleBtn.Parent = container
 
     local btnCorner = Instance.new("UICorner")
@@ -542,7 +828,7 @@ local function createToggle(col, text, default, callback)
     toggleBtn.MouseButton1Click:Connect(function()
         state = not state
         if state then
-            toggleBtn.BackgroundColor3 = Color3.fromRGB(60, 70, 120)
+            toggleBtn.BackgroundColor3 = themeSettings.accentColor
             toggleBtn.Text = "ON"
             toggleBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
         else
@@ -558,32 +844,35 @@ local function createToggle(col, text, default, callback)
     return container
 end
 
--- Функция создания выбора из списка
 local function createDropdown(col, text, options, default, callback)
     local container = Instance.new("Frame")
     container.Name = text .. "Dropdown"
     container.BackgroundTransparency = 1
     container.Size = UDim2.new(1, -20, 0, 45)
+    container.ZIndex = 1004
     container.Parent = col.scrolling
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.TextColor3 = themeSettings.secondaryTextColor
     label.TextSize = 14
     label.Position = UDim2.new(0, 0, 0, 0)
     label.Size = UDim2.new(1, -60, 0, 20)
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 1005
     label.Parent = container
 
     local selectBtn = Instance.new("TextButton")
-    selectBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+    selectBtn.BackgroundColor3 = themeSettings.buttonsColor
+    selectBtn.BackgroundTransparency = themeSettings.buttonsTransparency
     selectBtn.Position = UDim2.new(0, 0, 0, 25)
     selectBtn.Size = UDim2.new(1, 0, 0, 20)
     selectBtn.Text = default or options[1]
-    selectBtn.TextColor3 = Color3.new(1, 1, 1)
+    selectBtn.TextColor3 = themeSettings.textColor
     selectBtn.TextSize = 12
+    selectBtn.ZIndex = 1006
     selectBtn.Parent = container
 
     local btnCorner = Instance.new("UICorner")
@@ -606,6 +895,8 @@ local function createDropdown(col, text, options, default, callback)
             if text == "ESP Mode" then
                 features.espMode = options[currentIndex]
                 updateESP()
+            elseif text == "Particle Type" then
+                particleFeatures.particleType = options[currentIndex]
             end
         end
     end)
@@ -613,23 +904,24 @@ local function createDropdown(col, text, options, default, callback)
     return selectBtn
 end
 
--- Функция создания выбора цвета
 local function createColorPicker(col, text, defaultColor, callback)
     local container = Instance.new("Frame")
     container.Name = text .. "Color"
     container.BackgroundTransparency = 1
     container.Size = UDim2.new(1, -20, 0, 25)
+    container.ZIndex = 1004
     container.Parent = col.scrolling
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.Gotham
     label.Text = text
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.TextColor3 = themeSettings.secondaryTextColor
     label.TextSize = 14
     label.Position = UDim2.new(0, 0, 0, 0)
     label.Size = UDim2.new(1, -40, 1, 0)
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 1005
     label.Parent = container
 
     local colorBtn = Instance.new("TextButton")
@@ -637,6 +929,7 @@ local function createColorPicker(col, text, defaultColor, callback)
     colorBtn.Position = UDim2.new(1, -30, 0, 2)
     colorBtn.Size = UDim2.new(0, 25, 0, 20)
     colorBtn.Text = ""
+    colorBtn.ZIndex = 1006
     colorBtn.Parent = container
 
     local btnCorner = Instance.new("UICorner")
@@ -667,6 +960,13 @@ local function createColorPicker(col, text, defaultColor, callback)
             elseif text == "Team Color" then
                 features.espTeamColor = colors[colorIndex]
                 updateESP()
+            elseif text == "Trail Color" then
+                features.espTrailColor = colors[colorIndex]
+                updateESP()
+            elseif text == "Particle Color" then
+                particleFeatures.color = colors[colorIndex]
+            elseif text == "Акцент цвет" then
+                themeSettings.accentColor = colors[colorIndex]
             end
         end
     end)
@@ -674,20 +974,20 @@ local function createColorPicker(col, text, defaultColor, callback)
     return container
 end
 
--- Создаем кнопки
 -- COMBAT
 local aimbotBtn = createButton(cols.Combat, "Aimbot 360", false, function(on) features.aimbot = on end)
 createSlider(cols.Combat, "Скорость", 0.1, 1, 0.5, function(val) features.aimbotSpeed = val end, "")
 createSlider(cols.Combat, "FOV", 30, 180, 90, function(val) features.aimbotFOV = val end, "°")
 createToggle(cols.Combat, "Показать FOV", false, function(on) features.aimbotShowFOV = on end)
-local teamCheckBtn = createButton(cols.Combat, "Team Check", false, function(on) features.teamCheck = on end)
+local teamCheckBtn = createButton(cols.Combat, "Team Check (друзья)", false, function(on) 
+    features.teamCheck = on 
+    updateESP()
+end)
 
 -- MOVEMENT
 local flyBtn = createButton(cols.Movement, "Fly", false, function(on) features.fly = on end)
 createSlider(cols.Movement, "Скорость", 10, 200, 50, function(val) features.flySpeed = val end, "")
-createToggle(cols.Movement, "Анти-кик", false, function(on) features.flyAntiKick = on end)
 local noclipBtn = createButton(cols.Movement, "Noclip", false, function(on) features.noclip = on end)
-createToggle(cols.Movement, "Анти-кик", false, function(on) features.noclipAntiKick = on end)
 local infJumpBtn = createButton(cols.Movement, "Inf Jump", false, function(on) features.infJump = on end)
 
 -- VISUALS
@@ -737,6 +1037,14 @@ createToggle(cols.ESP, "Показать дист.", false, function(on)
     features.espShowDistance = on
     updateESP()
 end)
+createToggle(cols.ESP, "Трейлы", false, function(on)
+    features.espShowTrails = on
+    updateESP()
+end)
+createSlider(cols.ESP, "Время трейла", 1, 10, 5, function(val)
+    features.espTrailTime = val
+    updateESP()
+end, "s")
 createColorPicker(cols.ESP, "ESP Color", features.espColor, function(color) 
     features.espColor = color
     updateESP()
@@ -749,32 +1057,36 @@ createColorPicker(cols.ESP, "Team Color", features.espTeamColor, function(color)
     features.espTeamColor = color
     updateESP()
 end)
+createColorPicker(cols.ESP, "Trail Color", features.espTrailColor, function(color)
+    features.espTrailColor = color
+    updateESP()
+end)
 
 -- MISC
-local particlesBtn = createButton(cols.Misc, "Particles", false, function(on)
+local particlesBtn = createButton(cols.Misc, "Particles 3D", false, function(on)
     particleFeatures.enabled = on
-    updateParticles()
 end)
-createDropdown(cols.Misc, "Тип", {"Шарики", "Сердечки", "Звездочки", "Доллары"}, "Шарики", function(val)
+createDropdown(cols.Misc, "Particle Type", {"Шары 3D", "Огненные", "Ледяные", "Радужные"}, "Шары 3D", function(val)
     particleFeatures.particleType = val
-    if particleFeatures.enabled then updateParticles() end
 end)
-createSlider(cols.Misc, "Кол-во", 1, 20, 5, function(val)
+createSlider(cols.Misc, "Кол-во", 5, 50, 20, function(val)
     particleFeatures.count = math.floor(val)
-    if particleFeatures.enabled then updateParticles() end
 end, "")
-createSlider(cols.Misc, "Размер", 0.5, 3, 1, function(val)
+createSlider(cols.Misc, "Размер", 0.2, 2, 0.5, function(val)
     particleFeatures.size = val
-    if particleFeatures.enabled then updateParticles() end
 end, "")
-createSlider(cols.Misc, "Скорость", 1, 10, 3, function(val)
+createSlider(cols.Misc, "Скорость", 5, 30, 10, function(val)
     particleFeatures.speed = val
-    if particleFeatures.enabled then updateParticles() end
 end, "")
-createSlider(cols.Misc, "Разброс", 10, 100, 50, function(val)
+createSlider(cols.Misc, "Радиус", 20, 100, 50, function(val)
     particleFeatures.spread = val
-    if particleFeatures.enabled then updateParticles() end
 end, "")
+createSlider(cols.Misc, "Время жизни", 1, 10, 3, function(val)
+    particleFeatures.lifetime = val
+end, "s")
+createColorPicker(cols.Misc, "Particle Color", particleFeatures.color, function(color)
+    particleFeatures.color = color
+end)
 createDropdown(cols.Misc, "Время", {"День", "Ночь", "Закат", "Рассвет"}, "День", function(val)
     if val == "День" then
         Lighting.ClockTime = 14
@@ -806,76 +1118,160 @@ local resetBtn = Instance.new("TextButton")
 resetBtn.Name = "ResetBtn"
 resetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
 resetBtn.Size = UDim2.new(1, -20, 0, 28)
-resetBtn.Text = "Сбросить прозрачность"
+resetBtn.Text = "Сбросить тему"
 resetBtn.TextColor3 = Color3.new(1, 1, 1)
 resetBtn.TextSize = 14
+resetBtn.ZIndex = 1004
 resetBtn.Parent = cols.Theme.scrolling
 
 local resetCorner = Instance.new("UICorner")
 resetCorner.CornerRadius = UDim.new(0, 6)
 resetCorner.Parent = resetBtn
 
-createSlider(cols.Theme, "Колонки прозрачность", 0, 0.5, 0.1, function(val)
+-- Настройки темы
+createSlider(cols.Theme, "Затемнение фона", 0, 1, 0.5, function(val)
+    themeSettings.bgDimTransparency = val
+    bgDim.BackgroundTransparency = val
+end, "")
+createSlider(cols.Theme, "Прозрачность колонок", 0, 0.5, 0.1, function(val)
+    themeSettings.columnsTransparency = val
     for name, col in pairs(cols) do
         col.frame.BackgroundTransparency = val
     end
 end, "")
-createSlider(cols.Theme, "Кнопки прозрачность", 0, 0.5, 0.2, function(val) end, "")
-createColorPicker(cols.Theme, "Цвет фона", Color3.fromRGB(0, 0, 0), function(color)
+createSlider(cols.Theme, "Прозрачность кнопок", 0, 0.5, 0.2, function(val)
+    themeSettings.buttonsTransparency = val
+    for name, col in pairs(cols) do
+        for _, child in ipairs(col.scrolling:GetChildren()) do
+            if child:IsA("TextButton") and child.Name ~= "ResetBtn" then
+                child.BackgroundTransparency = val
+            end
+        end
+    end
+end, "")
+createSlider(cols.Theme, "Яркость UI", 0.5, 2, 1, function(val)
+    themeSettings.brightness = val
+    gui.Saturation = val
+end, "x")
+
+createColorPicker(cols.Theme, "Цвет фона", themeSettings.bgDimColor, function(color)
+    themeSettings.bgDimColor = color
     bgDim.BackgroundColor3 = color
 end)
-createColorPicker(cols.Theme, "Цвет колонок", Color3.fromRGB(30, 30, 35), function(color)
+
+createColorPicker(cols.Theme, "Цвет колонок", themeSettings.columnsColor, function(color)
+    themeSettings.columnsColor = color
     for name, col in pairs(cols) do
         col.frame.BackgroundColor3 = color
     end
 end)
-createColorPicker(cols.Theme, "Цвет кнопок", Color3.fromRGB(40, 40, 45), function(color) end)
 
-resetBtn.MouseButton1Click:Connect(function()
-    bgDim.BackgroundTransparency = 0.5
+createColorPicker(cols.Theme, "Цвет кнопок", themeSettings.buttonsColor, function(color)
+    themeSettings.buttonsColor = color
     for name, col in pairs(cols) do
-        col.frame.BackgroundTransparency = 0.1
-    end
-    bgDim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    for name, col in pairs(cols) do
-        col.frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        for _, child in ipairs(col.scrolling:GetChildren()) do
+            if child:IsA("TextButton") and child.Name ~= "ResetBtn" then
+                child.BackgroundColor3 = color
+            end
+        end
     end
 end)
 
--- Строка поиска
-local searchBar = Instance.new("Frame")
-searchBar.Name = "SearchBar"
-searchBar.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-searchBar.BackgroundTransparency = 0.1
-searchBar.BorderSizePixel = 0
-searchBar.Position = UDim2.new(0.5, -250, 0, 640)
-searchBar.Size = UDim2.new(0, 500, 0, 40)
-searchBar.Parent = uiContainer
+createColorPicker(cols.Theme, "Акцент цвет", themeSettings.accentColor, function(color)
+    themeSettings.accentColor = color
+    for name, col in pairs(cols) do
+        for _, child in ipairs(col.scrolling:GetChildren()) do
+            if child:IsA("TextButton") then
+                if child:FindFirstChild("Status") and child.Status.Text == "ON" then
+                    child.BackgroundColor3 = color
+                end
+            end
+            if child:IsA("Frame") and child.Name:find("Slider") then
+                for _, sliderChild in ipairs(child:GetDescendants()) do
+                    if sliderChild:IsA("Frame") and sliderChild.Parent and sliderChild.Parent:IsA("Frame") and sliderChild.Parent.Parent == child then
+                        sliderChild.BackgroundColor3 = color
+                    end
+                end
+            end
+        end
+    end
+end)
 
-local searchCorner = Instance.new("UICorner")
-searchCorner.CornerRadius = UDim.new(0, 10)
-searchCorner.Parent = searchBar
+createColorPicker(cols.Theme, "Цвет текста", themeSettings.textColor, function(color)
+    themeSettings.textColor = color
+    for name, col in pairs(cols) do
+        col.frame.Title.TextColor3 = color
+        for _, child in ipairs(col.scrolling:GetChildren()) do
+            if child:IsA("TextButton") then
+                for _, btnChild in ipairs(child:GetChildren()) do
+                    if btnChild:IsA("TextLabel") and btnChild.Name ~= "Status" then
+                        btnChild.TextColor3 = color
+                    end
+                end
+            end
+        end
+    end
+end)
 
-local searchIcon = Instance.new("TextLabel")
-searchIcon.BackgroundTransparency = 1
-searchIcon.Font = Enum.Font.Gotham
-searchIcon.Text = ">"
-searchIcon.TextColor3 = Color3.fromRGB(150, 150, 150)
-searchIcon.TextSize = 20
-searchIcon.Position = UDim2.new(0, 15, 0, 0)
-searchIcon.Size = UDim2.new(0, 20, 1, 0)
-searchIcon.Parent = searchBar
+-- Настройки минибара
+createToggle(cols.Theme, "Минибар включен", true, function(on)
+    themeSettings.miniBarEnabled = on
+    if not uiContainer.Visible and on then
+        miniBar.Visible = true
+    elseif not on then
+        miniBar.Visible = false
+    end
+end)
 
-local searchText = Instance.new("TextLabel")
-searchText.BackgroundTransparency = 1
-searchText.Font = Enum.Font.Gotham
-searchText.Text = "Search"
-searchText.TextColor3 = Color3.fromRGB(150, 150, 150)
-searchText.TextSize = 16
-searchText.Position = UDim2.new(0, 40, 0, 0)
-searchText.Size = UDim2.new(1, -80, 1, 0)
-searchText.TextXAlignment = Enum.TextXAlignment.Left
-searchText.Parent = searchBar
+createToggle(cols.Theme, "Минибар: FPS", true, function(on)
+    themeSettings.miniBarShowFPS = on
+end)
+
+createToggle(cols.Theme, "Минибар: Время", true, function(on)
+    themeSettings.miniBarShowTime = on
+end)
+
+createToggle(cols.Theme, "Минибар: Пинг", true, function(on)
+    themeSettings.miniBarShowPing = on
+end)
+
+resetBtn.MouseButton1Click:Connect(function()
+    themeSettings.bgDimTransparency = 0.5
+    themeSettings.bgDimColor = Color3.fromRGB(0, 0, 0)
+    themeSettings.columnsTransparency = 0.1
+    themeSettings.columnsColor = Color3.fromRGB(30, 30, 35)
+    themeSettings.buttonsTransparency = 0.2
+    themeSettings.buttonsColor = Color3.fromRGB(40, 40, 45)
+    themeSettings.accentColor = Color3.fromRGB(60, 70, 120)
+    themeSettings.textColor = Color3.fromRGB(255, 255, 255)
+    themeSettings.secondaryTextColor = Color3.fromRGB(200, 200, 200)
+    themeSettings.brightness = 1
+    
+    bgDim.BackgroundTransparency = 0.5
+    bgDim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    gui.Saturation = 1
+    
+    for name, col in pairs(cols) do
+        col.frame.BackgroundTransparency = 0.1
+        col.frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        col.frame.Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+        
+        for _, child in ipairs(col.scrolling:GetChildren()) do
+            if child:IsA("TextButton") and child.Name ~= "ResetBtn" then
+                child.BackgroundTransparency = 0.2
+                child.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+                if child.Status and child.Status.Text == "ON" then
+                    child.BackgroundColor3 = Color3.fromRGB(60, 70, 120)
+                end
+                for _, btnChild in ipairs(child:GetChildren()) do
+                    if btnChild:IsA("TextLabel") and btnChild.Name ~= "Status" then
+                        btnChild.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    end
+                end
+            end
+        end
+    end
+end)
 
 -- Мини-бар
 local miniBar = Instance.new("Frame")
@@ -886,6 +1282,7 @@ miniBar.BorderSizePixel = 0
 miniBar.Position = UDim2.new(0.5, -150, 0, 20)
 miniBar.Size = UDim2.new(0, 300, 0, 50)
 miniBar.Visible = false
+miniBar.ZIndex = 2000
 miniBar.Parent = main
 
 local miniCorner = Instance.new("UICorner")
@@ -893,29 +1290,52 @@ miniCorner.CornerRadius = UDim.new(0, 10)
 miniCorner.Parent = miniBar
 
 local miniText = Instance.new("TextLabel")
+miniText.Name = "MiniBarText"
 miniText.BackgroundTransparency = 1
 miniText.Font = Enum.Font.Gotham
-miniText.Text = "NEZ0X UI"
+miniText.Text = "FPS: 60 | Time: 00:00 | Ping: 0ms"
 miniText.TextColor3 = Color3.new(1, 1, 1)
-miniText.TextSize = 18
-miniText.Size = UDim2.new(1, 0, 1, 0)
-miniText.TextXAlignment = Enum.TextXAlignment.Center
+miniText.TextSize = 16
+miniText.Size = UDim2.new(1, -20, 1, 0)
+miniText.Position = UDim2.new(0, 10, 0, 0)
+miniText.TextXAlignment = Enum.TextXAlignment.Left
+miniText.ZIndex = 2001
 miniText.Parent = miniBar
 
--- Управление клавишами
+spawn(function()
+    while true do
+        if miniBar.Visible and themeSettings.miniBarEnabled then
+            local parts = {}
+            if themeSettings.miniBarShowFPS then
+                table.insert(parts, "FPS: " .. fps)
+            end
+            if themeSettings.miniBarShowTime then
+                table.insert(parts, "Time: " .. currentTime)
+            end
+            if themeSettings.miniBarShowPing then
+                table.insert(parts, "Ping: " .. ping .. "ms")
+            end
+            miniText.Text = table.concat(parts, " | ")
+        end
+        wait(0.1)
+    end
+end)
+
 UIS.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     
     if input.UserInputType == Enum.UserInputType.Keyboard then
-        if input.KeyCode.Name == "F8" then
+        if input.KeyCode == Enum.KeyCode.F8 then
             gui:Destroy()
             blur:Destroy()
         end
         
-        if input.KeyCode.Name == "M" then
+        if input.KeyCode == Enum.KeyCode.M then
             if uiContainer.Visible then
                 uiContainer.Visible = false
-                miniBar.Visible = true
+                if themeSettings.miniBarEnabled then
+                    miniBar.Visible = true
+                end
                 bgDim.Visible = false
                 blur.Size = 0
             else
@@ -930,4 +1350,4 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-print("UI загружен - ВСЕ ЭЛЕМЕНТЫ ВИДНЫ (используй колесико мыши для прокрутки)")
+print("UI загружен - Aimbot не наводится на друзей, Particles 3D, ESP с трейлами")
